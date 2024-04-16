@@ -7,7 +7,7 @@
 
 #include "PlaylistLoader.h"
 
-#include "Settings.h"
+#include "InstanceSettings.h"
 #include "utilities/FileUtils.h"
 #include "utilities/Logger.h"
 #include "utilities/WebUtils.h"
@@ -28,14 +28,41 @@ using namespace iptvsimple::data;
 using namespace iptvsimple::utilities;
 
 PlaylistLoader::PlaylistLoader(kodi::addon::CInstancePVRClient* client, Channels& channels,
-                               ChannelGroups& channelGroups, Providers& providers, Media& media)
-  : m_channelGroups(channelGroups), m_channels(channels), m_providers(providers), m_media(media), m_client(client) { }
+                               ChannelGroups& channelGroups, Providers& providers, Media& media, std::shared_ptr<InstanceSettings>& settings)
+  : m_channelGroups(channelGroups), m_channels(channels), m_providers(providers), m_media(media), m_client(client), m_settings(settings) { }
 
 bool PlaylistLoader::Init()
 {
-  m_m3uLocation = Settings::GetInstance().GetM3ULocation();
-  m_logoLocation = Settings::GetInstance().GetLogoLocation();
+  m_m3uLocation = m_settings->GetM3ULocation();
+  m_logoLocation = m_settings->GetLogoLocation();
   return true;
+}
+
+namespace {
+
+bool GetOverrideRealTime(std::string& line)
+{
+  size_t realtimeIndex = line.find(REALTIME_OVERRIDE);
+  if (realtimeIndex != std::string::npos)
+  {
+    size_t startValueIndex = realtimeIndex + REALTIME_OVERRIDE.length();
+    size_t endQuoteIndex = line.find('"', startValueIndex);
+    if (endQuoteIndex != std::string::npos)
+    {
+      size_t valueLength = endQuoteIndex - startValueIndex;
+      std::string value = line.substr(startValueIndex, valueLength);
+      StringUtils::ToLower(value);
+      // The only value that matters is if the 'realtime' specifier is 'false'
+      // that means we want to override the realtime value but not treat the stream
+      // like media/VOD in the UI
+      // It's a bit confusing, but hey, that's Kodi for you ;)
+      return value == "false";
+    }
+  }
+
+  return false;
+}
+
 }
 
 bool PlaylistLoader::LoadPlayList()
@@ -50,10 +77,10 @@ bool PlaylistLoader::LoadPlayList()
   }
 
   // Cache is only allowed if refresh mode is disabled
-  bool useM3UCache = Settings::GetInstance().GetM3URefreshMode() != RefreshMode::DISABLED ? false : Settings::GetInstance().UseM3UCache();
+  bool useM3UCache = m_settings->GetM3URefreshMode() != RefreshMode::DISABLED ? false : m_settings->UseM3UCache();
 
   std::string playlistContent;
-  if (!FileUtils::GetCachedFileContents(M3U_CACHE_FILENAME, m_m3uLocation, playlistContent, useM3UCache))
+  if (!FileUtils::GetCachedFileContents(m_settings, m_settings->GetM3UCacheFilename(), m_m3uLocation, playlistContent, useM3UCache))
   {
     Logger::Log(LEVEL_ERROR, "%s - Unable to load playlist cache file '%s':  file is missing or empty.", __FUNCTION__, m_m3uLocation.c_str());
     return false;
@@ -64,15 +91,17 @@ bool PlaylistLoader::LoadPlayList()
   /* load channels */
   bool isFirstLine = true;
   bool isRealTime = true;
+  bool overrideRealTime = false;
   bool isMediaEntry = false;
   int epgTimeShift = 0;
-  int catchupCorrectionSecs = Settings::GetInstance().GetCatchupCorrectionSecs();
+  int catchupCorrectionSecs = m_settings->GetCatchupCorrectionSecs();
   std::vector<int> currentChannelGroupIdList;
   bool channelHadGroups = false;
   bool xeevCatchup = false;
+  bool groupsFromBeginDirective = false; //From EXTGRP begin directive
 
-  Channel tmpChannel;
-  MediaEntry tmpMediaEntry;
+  Channel tmpChannel{m_settings};
+  MediaEntry tmpMediaEntry{m_settings};
 
   std::string line;
   while (std::getline(stream, line))
@@ -104,14 +133,31 @@ bool PlaylistLoader::LoadPlayList()
           catchupCorrectionSecs = static_cast<int>(catchupCorrectionDecimal * 3600.0);
         }
 
-        std::string strXeevCatchup = ReadMarkerValue(line, CATCHUP);
-        if (strXeevCatchup == "xc")
+        //
+        // If there are catchup values in the M3U header we read them to be used as defaults later on
+        //
+        m_m3uHeaderStrings.m_catchup = ReadMarkerValue(line, CATCHUP);
+        // There is some xeev specific functionality if specificed in the header
+        if (m_m3uHeaderStrings.m_catchup == "xc")
           xeevCatchup = true;
+        // Some providers use a 'catchup-type' tag instead of 'catchup'
+        if (m_m3uHeaderStrings.m_catchup.empty())
+          m_m3uHeaderStrings.m_catchup = ReadMarkerValue(line, CATCHUP_TYPE);
+        m_m3uHeaderStrings.m_catchupDays = ReadMarkerValue(line, CATCHUP_DAYS);
+        m_m3uHeaderStrings.m_catchupSource = ReadMarkerValue(line, CATCHUP_SOURCE);
 
+        //
+        // Read either of the M3U header based EPG xmltv urls
+        //
         std::string tvgUrl = ReadMarkerValue(line, TVG_URL_MARKER);
         if (tvgUrl.empty())
           tvgUrl = ReadMarkerValue(line, TVG_URL_OTHER_MARKER);
-        Settings::GetInstance().SetTvgUrl(tvgUrl);
+        // The tvgUrl might be a comma separated list. If it is just take
+        // the first one as we don't support multiple list but at least it will work.
+        size_t found = tvgUrl.find(',');
+        if (found != std::string::npos)
+          tvgUrl = tvgUrl.substr(0, found);
+        m_settings->SetTvgUrl(tvgUrl);
 
         continue;
       }
@@ -125,17 +171,20 @@ bool PlaylistLoader::LoadPlayList()
     if (StringUtils::StartsWith(line, M3U_INFO_MARKER)) //#EXTINF
     {
       tmpChannel.SetChannelNumber(m_channels.GetCurrentChannelNumber());
-      currentChannelGroupIdList.clear();
 
       isMediaEntry = line.find(MEDIA) != std::string::npos ||
                      line.find(MEDIA_DIR) != std::string::npos ||
-                     line.find(MEDIA_SIZE) != std::string::npos;
+                     line.find(MEDIA_SIZE) != std::string::npos ||
+                     m_settings->MediaForcePlaylist();
 
-      const std::string groupNamesListString = ParseIntoChannel(line, tmpChannel, tmpMediaEntry, currentChannelGroupIdList, epgTimeShift, catchupCorrectionSecs, xeevCatchup);
+      overrideRealTime = GetOverrideRealTime(line);
+
+      const std::string groupNamesListString = ParseIntoChannel(line, tmpChannel, tmpMediaEntry, epgTimeShift, catchupCorrectionSecs, xeevCatchup);
 
       if (!groupNamesListString.empty())
       {
         ParseAndAddChannelGroups(groupNamesListString, currentChannelGroupIdList, tmpChannel.IsRadio());
+        groupsFromBeginDirective = false;
         channelHadGroups = true;
       }
     }
@@ -153,10 +202,15 @@ bool PlaylistLoader::LoadPlayList()
     }
     else if (StringUtils::StartsWith(line, M3U_GROUP_MARKER)) //#EXTGRP:
     {
+      //Clear any previous Group Ids
+      currentChannelGroupIdList.clear();
+      groupsFromBeginDirective = false;
+
       const std::string groupNamesListString = ReadMarkerValue(line, M3U_GROUP_MARKER);
       if (!groupNamesListString.empty())
       {
         ParseAndAddChannelGroups(groupNamesListString, currentChannelGroupIdList, tmpChannel.IsRadio());
+        groupsFromBeginDirective = true;
         channelHadGroups = true;
       }
     }
@@ -167,11 +221,24 @@ bool PlaylistLoader::LoadPlayList()
     }
     else if (line[0] != '#')
     {
-      Logger::Log(LEVEL_DEBUG, "%s - Adding channel '%s' with URL: '%s'", __FUNCTION__, tmpChannel.GetChannelName().c_str(), line.c_str());
+      Logger::Log(LEVEL_DEBUG, "%s - Adding channel or Media Entry '%s' with URL: '%s'", __FUNCTION__, tmpChannel.GetChannelName().c_str(), line.c_str());
 
-      if ((isRealTime || !Settings::GetInstance().IsMediaEnabled() || !Settings::GetInstance().ShowVodAsRecordings()) && !isMediaEntry)
+      if (m_settings->IsMediaEnabled() &&
+          (isMediaEntry || (m_settings->ShowVodAsRecordings() && !isRealTime)))
       {
-        tmpChannel.AddProperty(PVR_STREAM_PROPERTY_ISREALTIMESTREAM, "true");
+        MediaEntry entry = tmpMediaEntry;
+        entry.UpdateFrom(tmpChannel);
+        entry.SetStreamURL(line);
+
+        if (!m_media.AddMediaEntry(entry, currentChannelGroupIdList, m_channelGroups, channelHadGroups))
+          Logger::Log(LEVEL_DEBUG, "%s - Counld not add media entry as an entry with the same gnenerated unique ID already exists", __func__);
+      }
+      else
+      {
+        // There are cases where we want the stream to be represetned as a channel with live streaming disabled
+        // to allow features such as passthrough to work. We don't want this to be VOD as then it would be treated like media.
+        if (!overrideRealTime)
+          tmpChannel.AddProperty(PVR_STREAM_PROPERTY_ISREALTIMESTREAM, "true");
 
         Channel channel = tmpChannel;
         channel.SetStreamURL(line);
@@ -179,27 +246,27 @@ bool PlaylistLoader::LoadPlayList()
 
         if (!m_channels.AddChannel(channel, currentChannelGroupIdList, m_channelGroups, channelHadGroups))
           Logger::Log(LEVEL_DEBUG, "%s - Not adding channel '%s' as only channels with groups are supported for %s channels per add-on settings", __func__, tmpChannel.GetChannelName().c_str(), channel.IsRadio() ? "radio" : "tv");
-      }
-      else // We have media
-      {
-        MediaEntry entry = tmpMediaEntry;
-        entry.UpdateFrom(tmpChannel);
-        entry.SetStreamURL(line);
-
-        if (!m_media.AddMediaEntry(entry))
-          Logger::Log(LEVEL_DEBUG, "%s - Counld not add media entry as an entry with the same gnenerated unique ID already exists", __func__);
 
       }
 
       tmpChannel.Reset();
       tmpMediaEntry.Reset();
       isRealTime = true;
+      overrideRealTime = false;
       isMediaEntry = false;
       channelHadGroups = false;
+
+      // We want to clear the groups if they came from a 'group-title' tag from a channel
+      // But if it's from an EXTGRP tag we don't as that's a begin directive.
+      if (!groupsFromBeginDirective)
+        currentChannelGroupIdList.clear();
     }
   }
 
   stream.clear();
+
+  //Now we need to remove any emptry channel groups. We do this as we may have added some while loading media entries.
+  m_channelGroups.RemoveEmptyGroups();
 
   int milliseconds = std::chrono::duration_cast<std::chrono::milliseconds>(
                       std::chrono::high_resolution_clock::now() - started).count();
@@ -221,7 +288,7 @@ bool PlaylistLoader::LoadPlayList()
   return true;
 }
 
-std::string PlaylistLoader::ParseIntoChannel(const std::string& line, Channel& channel, MediaEntry& mediaEntry, std::vector<int>& groupIdList, int epgTimeShift, int catchupCorrectionSecs, bool xeevCatchup)
+std::string PlaylistLoader::ParseIntoChannel(const std::string& line, Channel& channel, MediaEntry& mediaEntry, int epgTimeShift, int catchupCorrectionSecs, bool xeevCatchup)
 {
   size_t colonIndex = line.find(':');
   size_t commaIndex = line.rfind(','); //default to last comma on line in case we don't find a better match
@@ -280,6 +347,9 @@ std::string PlaylistLoader::ParseIntoChannel(const std::string& line, Channel& c
     // Some providers use a 'catchup-type' tag instead of 'catchup'
     if (strCatchup.empty())
       strCatchup = ReadMarkerValue(infoLine, CATCHUP_TYPE);
+    // If we still don't have a value use the header supplied value if there is one
+    if (strCatchup.empty() && !m_m3uHeaderStrings.m_catchup.empty())
+      strCatchup = m_m3uHeaderStrings.m_catchup;
 
     if (strTvgId.empty())
       strTvgId = ReadMarkerValue(infoLine, TVG_INFO_ID_MARKER_UC);
@@ -287,11 +357,15 @@ std::string PlaylistLoader::ParseIntoChannel(const std::string& line, Channel& c
     if (strTvgId.empty())
     {
       char buff[255];
-      sprintf(buff, "%d", std::atoi(infoLine.c_str()));
+      snprintf(buff, 255, "%d", std::atoi(infoLine.c_str()));
       strTvgId.append(buff);
     }
 
-    if (!strChnlNo.empty() && !Settings::GetInstance().NumberChannelsByM3uOrderOnly())
+    // If don't have a channel number try another format
+    if (strChnlNo.empty())
+      strChnlNo = ReadMarkerValue(infoLine, CHANNEL_NUMBER_MARKER);
+
+    if (!strChnlNo.empty() && !m_settings->NumberChannelsByM3uOrderOnly())
     {
       size_t found = strChnlNo.find('.');
       if (found != std::string::npos)
@@ -311,9 +385,12 @@ std::string PlaylistLoader::ParseIntoChannel(const std::string& line, Channel& c
     channel.SetTvgId(strTvgId);
     channel.SetTvgName(strTvgName);
     channel.SetCatchupSource(strCatchupSource);
+    // If we still don't have a value use the header supplied value if there is one
+    if (strCatchupSource.empty() && !m_m3uHeaderStrings.m_catchupSource.empty())
+      strCatchupSource = m_m3uHeaderStrings.m_catchupSource;
     channel.SetTvgShift(static_cast<int>(tvgShiftDecimal * 3600.0));
     channel.SetRadio(isRadio);
-    if (Settings::GetInstance().GetLogoPathType() == PathType::LOCAL_PATH && Settings::GetInstance().UseLocalLogosOnlyIgnoreM3U())
+    if (m_settings->GetLogoPathType() == PathType::LOCAL_PATH && m_settings->UseLocalLogosOnlyIgnoreM3U())
       channel.SetIconPathFromTvgLogo("", channelName);
     else
       channel.SetIconPathFromTvgLogo(strTvgLogo, channelName);
@@ -327,8 +404,9 @@ std::string PlaylistLoader::ParseIntoChannel(const std::string& line, Channel& c
 
     if (StringUtils::EqualsNoCase(strCatchup, "default") || StringUtils::EqualsNoCase(strCatchup, "append") ||
         StringUtils::EqualsNoCase(strCatchup, "shift") || StringUtils::EqualsNoCase(strCatchup, "flussonic") ||
-        StringUtils::EqualsNoCase(strCatchup, "flussonic-ts") || StringUtils::EqualsNoCase(strCatchup, "fs") ||
-        StringUtils::EqualsNoCase(strCatchup, "xc") || StringUtils::EqualsNoCase(strCatchup, "vod"))
+        StringUtils::EqualsNoCase(strCatchup, "flussonic-hls") || StringUtils::EqualsNoCase(strCatchup, "flussonic-ts") ||
+        StringUtils::EqualsNoCase(strCatchup, "fs") || StringUtils::EqualsNoCase(strCatchup, "xc") ||
+        StringUtils::EqualsNoCase(strCatchup, "vod"))
       channel.SetHasCatchup(true);
 
     if (StringUtils::EqualsNoCase(strCatchup, "default"))
@@ -337,12 +415,16 @@ std::string PlaylistLoader::ParseIntoChannel(const std::string& line, Channel& c
       channel.SetCatchupMode(CatchupMode::APPEND);
     else if (StringUtils::EqualsNoCase(strCatchup, "shift"))
       channel.SetCatchupMode(CatchupMode::SHIFT);
-    else if (StringUtils::EqualsNoCase(strCatchup, "flussonic") || StringUtils::EqualsNoCase(strCatchup, "flussonic-ts") || StringUtils::EqualsNoCase(strCatchup, "fs"))
+    else if (StringUtils::EqualsNoCase(strCatchup, "flussonic") || StringUtils::EqualsNoCase(strCatchup, "flussonic-hls") ||
+             StringUtils::EqualsNoCase(strCatchup, "flussonic-ts") || StringUtils::EqualsNoCase(strCatchup, "fs"))
       channel.SetCatchupMode(CatchupMode::FLUSSONIC);
     else if (StringUtils::EqualsNoCase(strCatchup, "xc"))
       channel.SetCatchupMode(CatchupMode::XTREAM_CODES);
     else if (StringUtils::EqualsNoCase(strCatchup, "vod"))
       channel.SetCatchupMode(CatchupMode::VOD);
+
+    if (StringUtils::EqualsNoCase(strCatchup, "flussonic-ts") || StringUtils::EqualsNoCase(strCatchup, "fs"))
+      channel.SetCatchupTSStream(true);
 
     if (!channel.HasCatchup() && xeevCatchup && (StringUtils::StartsWith(channelName, "* ") || StringUtils::StartsWith(channelName, "[+] ")))
     {
@@ -359,12 +441,15 @@ std::string PlaylistLoader::ParseIntoChannel(const std::string& line, Channel& c
 
     if (!strCatchupDays.empty())
       channel.SetCatchupDays(atoi(strCatchupDays.c_str()));
+    // If we still don't have a value use the header supplied value if there is one
+    else if (!m_m3uHeaderStrings.m_catchupSource.empty())
+      channel.SetCatchupDays(atoi(m_m3uHeaderStrings.m_catchupDays.c_str()));
     else if (channel.GetCatchupMode() == CatchupMode::VOD)
       channel.SetCatchupDays(IGNORE_CATCHUP_DAYS);
     else if (siptvTimeshiftDays > 0)
       channel.SetCatchupDays(siptvTimeshiftDays);
     else
-      channel.SetCatchupDays(Settings::GetInstance().GetCatchupDays());
+      channel.SetCatchupDays(m_settings->GetCatchupDays());
 
     // We also need to support the timeshift="days" tag from siptv
     // this was used before the catchup tags were introduced
@@ -375,8 +460,8 @@ std::string PlaylistLoader::ParseIntoChannel(const std::string& line, Channel& c
       channel.SetHasCatchup(true);
     }
 
-    if (strProviderName.empty() && Settings::GetInstance().HasDefaultProviderName())
-      strProviderName = Settings::GetInstance().GetDefaultProviderName();
+    if (strProviderName.empty() && m_settings->HasDefaultProviderName())
+      strProviderName = m_settings->GetDefaultProviderName();
 
     auto provider = m_providers.AddProvider(strProviderName);
     if (provider)
@@ -419,10 +504,24 @@ std::string PlaylistLoader::ParseIntoChannel(const std::string& line, Channel& c
     if (!strMediaDir.empty())
       mediaEntry.SetDirectory(strMediaDir);
 
+    std::string groupNames = ReadMarkerValue(infoLine, GROUP_NAME_MARKER);
+    auto& m3uGroupPathMode = m_settings->GetMediaUseM3UGroupPathMode();
+    if (m3uGroupPathMode != MediaUseM3UGroupPathMode::IGNORE_GROUP_NAME)
+    {
+      if (m3uGroupPathMode == MediaUseM3UGroupPathMode::ALWAYS_APPEND || strMediaDir.empty())
+      {
+        if (!groupNames.empty() && groupNames.find(';') == std::string::npos)
+        {
+          //A media entry directory will always end with a "/"
+          mediaEntry.SetDirectory(mediaEntry.GetDirectory() + groupNames);
+        }
+      }
+    }
+
     if (!strMediaSize.empty())
       mediaEntry.SetSizeInBytes(std::strtoll(strMediaSize.c_str(), nullptr, 10));
 
-    return ReadMarkerValue(infoLine, GROUP_NAME_MARKER);
+    return groupNames;
   }
 
   return "";
@@ -484,7 +583,7 @@ void PlaylistLoader::ParseSinglePropertyIntoChannel(const std::string& line, Cha
 
 void PlaylistLoader::ReloadPlayList()
 {
-  m_m3uLocation = Settings::GetInstance().GetM3ULocation();
+  m_m3uLocation = m_settings->GetM3ULocation();
 
   m_channels.Clear();
   m_channelGroups.Clear();
@@ -514,6 +613,13 @@ std::string PlaylistLoader::ReadMarkerValue(const std::string& line, const std::
     markerStart += marker.length();
     if (markerStart < line.length())
     {
+      if (marker == M3U_GROUP_MARKER && line[markerStart] != '"')
+      {
+        //For this case we just want to return the full string without splitting it
+        //This is because groups use semi-colons and not spaces as a delimiter
+        return line.substr(markerStart, line.length());
+      }
+
       char find = ' ';
       if (line[markerStart] == '"')
       {

@@ -26,6 +26,12 @@ namespace iptvsimple
     class EpgEntry : public BaseEntry
     {
     public:
+      EpgEntry() {};
+      EpgEntry(std::shared_ptr<iptvsimple::InstanceSettings> settings)
+      {
+        m_settings = settings;
+      };
+
       int GetBroadcastId() const { return m_broadcastId; }
       void SetBroadcastId(int value) { m_broadcastId = value; }
 
@@ -43,7 +49,7 @@ namespace iptvsimple
 
       void UpdateTo(kodi::addon::PVREPGTag& left, int iChannelUid, int timeShift, const std::vector<EpgGenre>& genres);
       bool UpdateFrom(const pugi::xml_node& programmeNode, const std::string& id,
-                      int start, int end, int minShiftTime, int maxShiftTime);
+                      int epgWindowsStart, int epgWindowsEnd, int minShiftTime, int maxShiftTime);
 
     private:
       bool SetEpgGenre(std::vector<EpgGenre> genreMappings);

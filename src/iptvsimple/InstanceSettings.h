@@ -25,10 +25,8 @@ namespace iptvsimple
   static const int DEFAULT_UDPXY_MULTICAST_RELAY_PORT = 4022;
 
   static const int DEFAULT_NUM_GROUPS = 1;
-  static const std::string CHANNEL_GROUPS_DIR = "/channelGroups";
   static const std::string DEFAULT_CUSTOM_TV_GROUPS_FILE = ADDON_DATA_BASE_DIR + "/channelGroups/customTVGroups-example.xml";
   static const std::string DEFAULT_CUSTOM_RADIO_GROUPS_FILE = ADDON_DATA_BASE_DIR + "/channelGroups/customRadioGroups-example.xml";
-  static const std::string CHANNEL_GROUPS_ADDON_DATA_BASE_DIR = ADDON_DATA_BASE_DIR + CHANNEL_GROUPS_DIR;
 
   enum class PathType
     : int // same type as addon settings
@@ -61,6 +59,15 @@ namespace iptvsimple
     PREFER_XMLTV
   };
 
+  enum class MediaUseM3UGroupPathMode
+    : int // same type as addon settings
+  {
+    IGNORE_GROUP_NAME = 0,
+    ALWAYS_APPEND,
+    ONLY_IF_EMPTY
+  };
+
+
   enum class CatchupOverrideMode
     : int // same type as addon settings
   {
@@ -69,24 +76,17 @@ namespace iptvsimple
     ALL_CHANNELS
   };
 
-  class Settings
+  class InstanceSettings
   {
   public:
-    /**
-     * Singleton getter for the instance
-     */
-    static Settings& GetInstance()
-    {
-      static Settings settings;
-      return settings;
-    }
+    explicit InstanceSettings(kodi::addon::IAddonInstance& instance, const kodi::addon::IInstanceInfo& instanceInfo);
 
-    void ReadFromAddon(const std::string& userPath, const std::string& clientPath);
-    void ReloadAddonSettings();
-    ADDON_STATUS SetValue(const std::string& settingName, const kodi::CSettingValue& settingValue);
+    ADDON_STATUS SetSetting(const std::string& settingName, const kodi::addon::CSettingValue& settingValue);
 
-    const std::string& GetUserPath() const { return m_userPath; }
-    const std::string& GetClientPath() const { return m_clientPath; }
+    void ReadSettings();
+    void ReloadAddonInstanceSettings();
+
+    const std::string GetUserPath() const { return kodi::addon::GetUserPath(); }
 
     const std::string& GetM3ULocation() const { return m_m3uPathType == PathType::REMOTE_PATH ? m_m3uUrl : m_m3uPath; }
     const PathType& GetM3UPathType() const { return m_m3uPathType; }
@@ -123,6 +123,7 @@ namespace iptvsimple
     int GetEpgTimeshiftSecs() const { return static_cast<int>(m_epgTimeShiftHours * 60 * 60); }
     bool GetTsOverride() const { return m_tsOverride; }
     bool AlwaysLoadEPGData() const { return m_epgLogosMode == EpgLogosMode::PREFER_XMLTV || IsCatchupEnabled(); }
+    bool IgnoreCaseForEpgChannelIds() const { return m_ignoreCaseForEpgChannelIds; }
 
     const std::string& GetGenresLocation() const { return m_genresPathType == PathType::REMOTE_PATH ? m_genresUrl : m_genresPath; }
     bool UseEpgGenreTextWhenMapping() const { return m_useEpgGenreTextWhenMapping; }
@@ -141,6 +142,8 @@ namespace iptvsimple
     bool ShowVodAsRecordings() const { return m_showVodAsRecordings; }
     bool GroupMediaByTitle() const { return m_groupMediaByTitle; }
     bool GroupMediaBySeason() const { return m_groupMediaBySeason; }
+    const MediaUseM3UGroupPathMode& GetMediaUseM3UGroupPathMode() { return m_mediaUseM3UGroupPathMode; }
+    bool MediaForcePlaylist() const { return m_mediaForcePlaylist; }
     bool IncludeShowInfoInMediaTitle() const { return m_includeShowInfoInMediaTitle; }
 
     bool IsTimeshiftEnabled() const { return m_timeshiftEnabled; }
@@ -179,14 +182,13 @@ namespace iptvsimple
     std::vector<std::string>& GetCustomTVChannelGroupNameList() { return m_customTVChannelGroupNameList; }
     std::vector<std::string>& GetCustomRadioChannelGroupNameList() { return m_customRadioChannelGroupNameList; }
 
-  private:
-    Settings() = default;
+    const std::string GetM3UCacheFilename() { return M3U_CACHE_FILENAME + "-" + std::to_string(m_instanceNumber); }
+    const std::string GetXMLTVCacheFilename() { return XMLTV_CACHE_FILENAME + "-" + std::to_string(m_instanceNumber); }
 
-    Settings(Settings const&) = delete;
-    void operator=(Settings const&) = delete;
+  private:
 
     template<typename T, typename V>
-    V SetSetting(const std::string& settingName, const kodi::CSettingValue& settingValue, T& currentValue, V returnValueIfChanged, V defaultReturnValue)
+    V SetSetting(const std::string& settingName, const kodi::addon::CSettingValue& settingValue, T& currentValue, V returnValueIfChanged, V defaultReturnValue)
     {
       T newValue;
       if (std::is_same<T, float>::value)
@@ -212,7 +214,7 @@ namespace iptvsimple
     }
 
     template<typename T, typename V>
-    V SetEnumSetting(const std::string& settingName, const kodi::CSettingValue& settingValue, T& currentValue, V returnValueIfChanged, V defaultReturnValue)
+    V SetEnumSetting(const std::string& settingName, const kodi::addon::CSettingValue& settingValue, T& currentValue, V returnValueIfChanged, V defaultReturnValue)
     {
       T newValue = settingValue.GetEnum<T>();
       if (newValue != currentValue)
@@ -226,7 +228,7 @@ namespace iptvsimple
     }
 
     template<typename V>
-    V SetStringSetting(const std::string& settingName, const kodi::CSettingValue& settingValue, std::string& currentValue, V returnValueIfChanged, V defaultReturnValue)
+    V SetStringSetting(const std::string& settingName, const kodi::addon::CSettingValue& settingValue, std::string& currentValue, V returnValueIfChanged, V defaultReturnValue)
     {
       const std::string strSettingValue = settingValue.GetString();
 
@@ -242,14 +244,11 @@ namespace iptvsimple
 
     static bool LoadCustomChannelGroupFile(std::string& file, std::vector<std::string>& channelGroupNameList);
 
-    std::string m_userPath;
-    std::string m_clientPath;
-
     // M3U
     PathType m_m3uPathType = PathType::REMOTE_PATH;
     std::string m_m3uPath;
     std::string m_m3uUrl;
-    bool m_cacheM3U = false;
+    bool m_cacheM3U = true;
     int m_startChannelNumber = 1;
     bool m_numberChannelsByM3uOrderOnly = false;
     RefreshMode m_m3uRefreshMode = RefreshMode::DISABLED;
@@ -262,42 +261,43 @@ namespace iptvsimple
     // Groups
     bool m_allowTVChannelGroupsOnly = false;
     ChannelGroupMode m_tvChannelGroupMode = ChannelGroupMode::ALL_GROUPS;
-    unsigned int m_numTVGroups = DEFAULT_NUM_GROUPS;
+    int m_numTVGroups = DEFAULT_NUM_GROUPS;
     std::string m_oneTVGroup = "";
     std::string m_twoTVGroup = "";
     std::string m_threeTVGroup = "";
     std::string m_fourTVGroup = "";
     std::string m_fiveTVGroup = "";
-    std::string m_customTVGroupsFile = "";
+    std::string m_customTVGroupsFile = DEFAULT_CUSTOM_TV_GROUPS_FILE;
     bool m_allowRadioChannelGroupsOnly = false;
     ChannelGroupMode m_radioChannelGroupMode = ChannelGroupMode::ALL_GROUPS;
-    unsigned int m_numRadioGroups = DEFAULT_NUM_GROUPS;
+    int m_numRadioGroups = DEFAULT_NUM_GROUPS;
     std::string m_oneRadioGroup = "";
     std::string m_twoRadioGroup = "";
     std::string m_threeRadioGroup = "";
     std::string m_fourRadioGroup = "";
     std::string m_fiveRadioGroup = "";
-    std::string m_customRadioGroupsFile = "";
+    std::string m_customRadioGroupsFile = DEFAULT_CUSTOM_RADIO_GROUPS_FILE;
 
     // EPG
     PathType m_epgPathType = PathType::REMOTE_PATH;
     std::string m_epgPath;
     std::string m_epgUrl;
-    bool m_cacheEPG = false;
-    float m_epgTimeShiftHours = 0;
-    bool m_tsOverride = true;
+    bool m_cacheEPG = true;
+    float m_epgTimeShiftHours = 0.0f;
+    bool m_tsOverride = false;
+    bool m_ignoreCaseForEpgChannelIds = true;
 
     // Genres
     bool m_useEpgGenreTextWhenMapping = false;
     PathType m_genresPathType = PathType::LOCAL_PATH;
-    std::string m_genresPath;
+    std::string m_genresPath = DEFAULT_GENRE_TEXT_MAP_FILE;
     std::string m_genresUrl;
 
     // Channel Logos
     PathType m_logoPathType = PathType::REMOTE_PATH;
     std::string m_logoPath;
     std::string m_logoBaseUrl;
-    EpgLogosMode m_epgLogosMode = EpgLogosMode::IGNORE_XMLTV;
+    EpgLogosMode m_epgLogosMode = EpgLogosMode::PREFER_M3U;
     bool m_useLocalLogosOnly = false;
 
     // Media
@@ -305,13 +305,15 @@ namespace iptvsimple
     bool m_groupMediaByTitle = true;
     bool m_groupMediaBySeason = true;
     bool m_includeShowInfoInMediaTitle = false;
+    MediaUseM3UGroupPathMode m_mediaUseM3UGroupPathMode = MediaUseM3UGroupPathMode::IGNORE_GROUP_NAME;
+    bool m_mediaForcePlaylist = false;
     bool m_showVodAsRecordings = true;
 
     // Timeshift
     bool m_timeshiftEnabled = false;
-    bool m_timeshiftEnabledAll = false;
-    bool m_timeshiftEnabledHttp = false;
-    bool m_timeshiftEnabledUdp = false;
+    bool m_timeshiftEnabledAll = true;
+    bool m_timeshiftEnabledHttp = true;
+    bool m_timeshiftEnabledUdp = true;
     bool m_timeshiftEnabledCustom = false;
 
     // Catchup
@@ -340,5 +342,8 @@ namespace iptvsimple
     std::vector<std::string> m_customRadioChannelGroupNameList;
 
     std::string m_tvgUrl;
+
+    kodi::addon::IAddonInstance& m_instance;
+    int m_instanceNumber = 0;
   };
 } //namespace iptvsimple

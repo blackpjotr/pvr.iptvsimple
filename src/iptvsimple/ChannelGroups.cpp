@@ -7,7 +7,6 @@
 
 #include "ChannelGroups.h"
 
-#include "Settings.h"
 #include "utilities/Logger.h"
 
 #include <kodi/General.h>
@@ -16,7 +15,7 @@ using namespace iptvsimple;
 using namespace iptvsimple::data;
 using namespace iptvsimple::utilities;
 
-ChannelGroups::ChannelGroups(const Channels& channels) : m_channels(channels) {}
+ChannelGroups::ChannelGroups(const Channels& channels, std::shared_ptr<iptvsimple::InstanceSettings>& settings) : m_channels(channels), m_settings(settings) {}
 
 bool ChannelGroups::Init()
 {
@@ -106,9 +105,9 @@ int ChannelGroups::AddChannelGroup(iptvsimple::data::ChannelGroup& channelGroup)
     // so let's add ' (Radio)' or ' (TV)' depending on which group was added first.
 
     if (existingChannelGroup->IsRadio())
-      channelGroup.SetGroupName(channelGroup.GetGroupName() + " (" + kodi::GetLocalizedString(30450) + ")"); // ' (TV)';
+      channelGroup.SetGroupName(channelGroup.GetGroupName() + " (" + kodi::addon::GetLocalizedString(30450) + ")"); // ' (TV)';
     else
-      channelGroup.SetGroupName(channelGroup.GetGroupName() + " (" + kodi::GetLocalizedString(30451) + ")"); // ' (Radio)';
+      channelGroup.SetGroupName(channelGroup.GetGroupName() + " (" + kodi::addon::GetLocalizedString(30451) + ")"); // ' (Radio)';
 
     existingChannelGroup = FindChannelGroup(channelGroup.GetGroupName());
   }
@@ -157,17 +156,17 @@ bool ChannelGroups::CheckChannelGroupAllowed(iptvsimple::data::ChannelGroup& new
 
   if (newChannelGroup.IsRadio())
   {
-    if (Settings::GetInstance().GetRadioChannelGroupMode() == ChannelGroupMode::ALL_GROUPS)
+    if (m_settings->GetRadioChannelGroupMode() == ChannelGroupMode::ALL_GROUPS)
       return true;
 
-    customNameList = Settings::GetInstance().GetCustomRadioChannelGroupNameList();
+    customNameList = m_settings->GetCustomRadioChannelGroupNameList();
   }
   else
   {
-    if (Settings::GetInstance().GetTVChannelGroupMode() == ChannelGroupMode::ALL_GROUPS)
+    if (m_settings->GetTVChannelGroupMode() == ChannelGroupMode::ALL_GROUPS)
       return true;
 
-    customNameList = Settings::GetInstance().GetCustomTVChannelGroupNameList();
+    customNameList = m_settings->GetCustomTVChannelGroupNameList();
   }
 
   for (const std::string& groupName : customNameList)
@@ -177,4 +176,12 @@ bool ChannelGroups::CheckChannelGroupAllowed(iptvsimple::data::ChannelGroup& new
   }
 
   return false;
+}
+
+void ChannelGroups::RemoveEmptyGroups()
+{
+  m_channelGroups.erase(
+    std::remove_if(m_channelGroups.begin(), m_channelGroups.end(),
+        [](const ChannelGroup& channelGroup) { return channelGroup.IsEmpty(); }),
+    m_channelGroups.end());
 }

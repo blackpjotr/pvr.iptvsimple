@@ -9,10 +9,12 @@
 
 #include "Channels.h"
 #include "Media.h"
-#include "Settings.h"
+#include "InstanceSettings.h"
 #include "data/ChannelEpg.h"
+#include "data/EpgEntry.h"
 #include "data/EpgGenre.h"
 
+#include <memory>
 #include <string>
 #include <vector>
 
@@ -33,14 +35,16 @@ namespace iptvsimple
     INVALID
   };
 
+  class InstanceSettings;
+
   class Epg
   {
   public:
-    Epg(kodi::addon::CInstancePVRClient* client, iptvsimple::Channels& channels, iptvsimple::Media& media);
+    Epg(kodi::addon::CInstancePVRClient* client, iptvsimple::Channels& channels, iptvsimple::Media& media, std::shared_ptr<iptvsimple::InstanceSettings>& settings);
 
     bool Init(int epgMaxPastDays, int epgMaxFutureDays);
 
-    PVR_ERROR GetEPGForChannel(int channelUid, time_t start, time_t end, kodi::addon::PVREPGTagsResultSet& results);
+    PVR_ERROR GetEPGForChannel(int channelUid, time_t epgWindowStart, time_t epgWindowEnd, kodi::addon::PVREPGTagsResultSet& results);
     void SetEPGMaxPastDays(int epgMaxPastDays);
     void SetEPGMaxFutureDays(int epgMaxFutureDays);
     void Clear();
@@ -58,7 +62,7 @@ namespace iptvsimple
     bool GetXMLTVFileWithRetries(std::string& data);
     char* FillBufferFromXMLTVData(std::string& data, std::string& decompressedData);
     bool LoadChannelEpgs(const pugi::xml_node& rootElement);
-    void LoadEpgEntries(const pugi::xml_node& rootElement, int start, int end);
+    void LoadEpgEntries(const pugi::xml_node& rootElement, int epgWindowStart, int epgWindowEnd);
     bool LoadGenres();
 
     void MergeEpgDataIntoMedia();
@@ -84,5 +88,7 @@ namespace iptvsimple
     std::vector<iptvsimple::data::EpgGenre> m_genreMappings;
 
     kodi::addon::CInstancePVRClient* m_client;
+
+    std::shared_ptr<iptvsimple::InstanceSettings> m_settings;
   };
 } //namespace iptvsimple

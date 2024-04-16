@@ -21,7 +21,7 @@ msgid "Kodi PVR addon for IPTV support."
 msgstr ""
 
 msgctxt "Addon Description"
-msgid "IPTV Simple PVR Client support m3u playlists, streaming of Live TV for multicast/unicast sources, listening to Radio channels and EPG.&#10;    &#10;For documentation visit: https://github.com/kodi-pvr/pvr.iptvsimple/blob/Matrix/README.md&#10;    "
+msgid "IPTV Simple PVR Client support m3u playlists, streaming of Live TV for multicast/unicast sources, listening to Radio channels and EPG.[CR]    [CR]For documentation visit: https://github.com/kodi-pvr/pvr.iptvsimple/blob/Matrix/README.md[CR]    "
 msgstr ""
 
 msgctxt "Addon Disclaimer"
@@ -422,13 +422,19 @@ msgstr ""
 #. help: Channel Logos - useLogosLocalPathOnly
 msgctxt "#30075"
 msgid "For local logos path ignore M3U logos"
+msgstr ""
 
 #. label-category: Groups
 msgctxt "#30076"
 msgid "Groups"
 msgstr ""
 
-#empty strings from id 30077 to 30099
+#. label: EPG Settings - epgIgnoreCaseForChannelIds
+msgctxt "#30077"
+msgid "Ignore Case for EPG Channel IDs"
+msgstr ""
+
+#empty strings from id 30078 to 30099
 
 #. label-category: catchup
 #. label-group: Catchup - Catchup
@@ -610,7 +616,32 @@ msgctxt "#30155"
 msgid "Show Media as recordings"
 msgstr ""
 
-#empty strings from id 30156 to 30449
+#. label: Media - mediaUseM3UGroupForGrouping
+msgctxt "#30156"
+msgid "Use M3U Group name in path"
+msgstr ""
+
+#. label-option: Media - mediaEnabled - IGNORE_GROUP_NAME
+msgctxt "#30157"
+msgid "Never"
+msgstr ""
+
+#. label-option: Media - mediaEnabled - ALWAYS_APPEND
+msgctxt "#30158"
+msgid "Always append"
+msgstr ""
+
+#. label-option: Media - mediaEnabled - ONLY_IF_EMPTY
+msgctxt "#30159"
+msgid "When no media-dir is present"
+msgstr ""
+
+#. label: Media - mediaForcePlaylist
+msgctxt "#30160"
+msgid "Force all M3U entries to be media"
+msgstr ""
+
+#empty strings from id 30161 to 30449
 
 #. label: TV
 msgctxt "#30450"
@@ -792,7 +823,12 @@ msgctxt "#30626"
 msgid "Whether or not to override the time shift for all channels with `EPG time shift`. If not enabled `EPG time shift` plus the individual time shift per channel (if available) will be used."
 msgstr ""
 
-#empty strings from id 30627 to 30639
+#. help: EPG Settings - epgIgnoreCaseForChannelIds
+msgctxt "#30627"
+msgid "Ignore Case for EPG Channel IDs, also known as tvg-id's, when matching channels to EPG entries. If disabled, only case senitive matching will be used."
+msgstr ""
+
+#empty strings from id 30628 to 30639
 
 #. help info - Channel Logos
 
@@ -1058,4 +1094,14 @@ msgstr ""
 #. label: Media - mediaEnabled
 msgctxt "#30805"
 msgid "If enabled, all IPTV media entries can be shown as PVR recordings. Otherwise, they appear as regular PVR channels."
+msgstr ""
+
+#. label: Media - mediaM3UGroupPath
+msgctxt "#30806"
+msgid "Select how to use the M3U group title in the path. Note that it will only be used if a single group name is provided. The options are: [B]Never[/B] - Never use it; [B]Always append[/B] - Always append it; [B]When no media-dir is present[/B] - Only use the group title of the M3U when no media-dir is provided."
+msgstr ""
+
+#. label: Media - mediaForcePlaylist
+msgctxt "#30806"
+msgid "Force the full playlist to be media, regardless of what tags are present.  Since the introduction of multiple instances for PVR add-ons this option can be useful."
 msgstr ""

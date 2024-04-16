@@ -7,7 +7,7 @@
 
 #include "FileUtils.h"
 
-#include "../Settings.h"
+#include "../InstanceSettings.h"
 
 #include <lzma.h>
 #include <zlib.h>
@@ -40,9 +40,9 @@ std::string FileUtils::PathCombine(const std::string& path, const std::string& f
   return result;
 }
 
-std::string FileUtils::GetUserDataAddonFilePath(const std::string& fileName)
+std::string FileUtils::GetUserDataAddonFilePath(const std::string& userFilePath, const std::string& fileName)
 {
-  return PathCombine(Settings::GetInstance().GetUserPath(), fileName);
+  return PathCombine(userFilePath, fileName);
 }
 
 int FileUtils::GetFileContents(const std::string& url, std::string& content)
@@ -169,11 +169,12 @@ bool FileUtils::XzDecompress(const std::string& compressedBytes, std::string& un
   return true;
 }
 
-int FileUtils::GetCachedFileContents(const std::string& cachedName, const std::string& filePath,
-                                       std::string& contents, const bool useCache /* false */)
+int FileUtils::GetCachedFileContents(std::shared_ptr<iptvsimple::InstanceSettings>& settings,
+                                     const std::string& cachedName, const std::string& filePath,
+                                     std::string& contents, const bool useCache /* false */)
 {
   bool needReload = false;
-  const std::string cachedPath = FileUtils::GetUserDataAddonFilePath(cachedName);
+  const std::string cachedPath = FileUtils::GetUserDataAddonFilePath(settings->GetUserPath(), cachedName);
 
   // check cached file is exists
   if (useCache && kodi::vfs::FileExists(cachedPath, false))
@@ -283,12 +284,12 @@ bool FileUtils::CopyDirectory(const std::string& sourceDir, const std::string& t
 
 std::string FileUtils::GetSystemAddonPath()
 {
-  return kodi::GetAddonPath();
+  return kodi::addon::GetAddonPath();
 }
 
 std::string FileUtils::GetResourceDataPath()
 {
-  return kodi::GetAddonPath("/resources/data");
+  return kodi::addon::GetAddonPath("/resources/data");
 }
 
 std::string FileUtils::ReadFileContents(kodi::vfs::CFile& file)

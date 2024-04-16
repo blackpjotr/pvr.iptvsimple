@@ -12,6 +12,7 @@
 #include "Channel.h"
 #include "EpgEntry.h"
 
+#include <regex>
 #include <string>
 
 #include <kodi/addon-instance/pvr/Recordings.h>
@@ -20,9 +21,14 @@ namespace iptvsimple
 {
   namespace data
   {
-    class ATTRIBUTE_HIDDEN MediaEntry : public BaseEntry
+    class ATTR_DLL_LOCAL MediaEntry : public BaseEntry
     {
     public:
+      MediaEntry(std::shared_ptr<iptvsimple::InstanceSettings> settings)
+      {
+        m_settings = settings;
+      };
+
       const std::string& GetMediaEntryId() const { return m_mediaEntryId; }
       void SetMediaEntryId(const std::string& value) { m_mediaEntryId = value; }
 
@@ -57,14 +63,19 @@ namespace iptvsimple
       void SetProviderUniqueId(int value) { m_providerUniqueId = value; }
 
       const std::string& GetDirectory() const { return m_directory; }
-      void SetDirectory(const std::string& value) { m_directory = value; }
+      void SetDirectory(const std::string& value);
 
       int64_t GetSizeInBytes() const { return m_sizeInBytes; }
       void SetSizeInBytes(int64_t value) { m_sizeInBytes = value; }
 
+      const std::string& GetFolderTitle() const { return m_folderTitle; }
+      void SetFolderTitle(const std::string& value);
+
       const std::string& GetM3UName() const { return m_m3uName; }
       const std::string& GetTvgId() const { return m_tvgId; }
       const std::string& GetTvgName() const { return m_tvgName; }
+      int GetTvgShift() const { return m_tvgShift; }
+      void SetTvgShift(int value) { m_tvgShift = value; }
 
       const std::map<std::string, std::string>& GetProperties() const { return m_properties; }
       void SetProperties(std::map<std::string, std::string>& value) { m_properties = value; }
@@ -79,10 +90,29 @@ namespace iptvsimple
       void Reset();
 
       void UpdateFrom(iptvsimple::data::Channel channel);
-      void UpdateFrom(iptvsimple::data::EpgEntry epgEntry);
+      void UpdateFrom(iptvsimple::data::EpgEntry epgEntry, const std::vector<EpgGenre>& genres);
       void UpdateTo(kodi::addon::PVRRecording& left, bool isInVirtualMediaEntryFolder, bool haveMediaTypes);
 
+      std::string GetMatchTextFromString(const std::string& text, const std::regex& pattern)
+      {
+        std::string matchText = "";
+        std::smatch match;
+
+        if (std::regex_match(text, match, pattern))
+        {
+          if (match.size() == 2)
+          {
+            std::ssub_match base_sub_match = match[1];
+            matchText = base_sub_match.str();
+          }
+        }
+
+        return matchText;
+      };
+
     private:
+      bool SetEpgGenre(std::vector<EpgGenre> genreMappings);
+
       std::string m_mediaEntryId;
       bool m_radio = false;
       time_t m_startTime = 0;
@@ -96,11 +126,13 @@ namespace iptvsimple
       int m_providerUniqueId = PVR_PROVIDER_INVALID_UID;
       std::string m_directory;
       int64_t m_sizeInBytes = 0;
+      std::string m_folderTitle;
 
       // EPG lookup
       std::string m_m3uName;
       std::string m_tvgId;
       std::string m_tvgName;
+      int m_tvgShift = 0;
 
       // Props
       std::map<std::string, std::string> m_properties;

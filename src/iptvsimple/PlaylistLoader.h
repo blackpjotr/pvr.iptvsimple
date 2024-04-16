@@ -11,7 +11,9 @@
 #include "ChannelGroups.h"
 #include "Providers.h"
 #include "Media.h"
+#include "InstanceSettings.h"
 
+#include <memory>
 #include <string>
 
 #include <kodi/addon-instance/PVR.h>
@@ -29,6 +31,7 @@ namespace iptvsimple
   static const std::string TVG_INFO_LOGO_MARKER    = "tvg-logo=";
   static const std::string TVG_INFO_SHIFT_MARKER   = "tvg-shift=";
   static const std::string TVG_INFO_CHNO_MARKER    = "tvg-chno=";
+  static const std::string CHANNEL_NUMBER_MARKER   = "ch-number=";
   static const std::string TVG_INFO_REC            = "tvg-rec="; // some providers use 'tvg-rec' instead of 'catchup-days'
   static const std::string GROUP_NAME_MARKER       = "group-title=";
   static const std::string CATCHUP                 = "catchup=";
@@ -45,6 +48,7 @@ namespace iptvsimple
   static const std::string MEDIA                   = "media=";
   static const std::string MEDIA_DIR               = "media-dir=";
   static const std::string MEDIA_SIZE              = "media-size=";
+  static const std::string REALTIME_OVERRIDE       = "realtime=\"";
   static const std::string KODIPROP_MARKER         = "#KODIPROP:";
   static const std::string EXTVLCOPT_MARKER        = "#EXTVLCOPT:";
   static const std::string EXTVLCOPT_DASH_MARKER   = "#EXTVLCOPT--";
@@ -53,10 +57,17 @@ namespace iptvsimple
 
   class PlaylistLoader
   {
+    struct M3UHeaderStrings {
+        // members will be public without `private:` keyword
+        std::string m_catchup;
+        std::string m_catchupDays;
+        std::string m_catchupSource;
+    };
+
   public:
     PlaylistLoader(kodi::addon::CInstancePVRClient* client, iptvsimple::Channels& channels,
                    iptvsimple::ChannelGroups& channelGroups, iptvsimple::Providers& providers,
-                   iptvsimple::Media& media);
+                   iptvsimple::Media& media, std::shared_ptr<iptvsimple::InstanceSettings>& setting);
 
     bool Init();
 
@@ -67,7 +78,7 @@ namespace iptvsimple
     static std::string ReadMarkerValue(const std::string& line, const std::string& markerName);
     static void ParseSinglePropertyIntoChannel(const std::string& line, iptvsimple::data::Channel& channel, const std::string& markerName);
 
-    std::string ParseIntoChannel(const std::string& line, iptvsimple::data::Channel& channel, data::MediaEntry& mediaEntry, std::vector<int>& groupIdList, int epgTimeShift, int catchupCorrectionSecs, bool xeevCatchup);
+    std::string ParseIntoChannel(const std::string& line, iptvsimple::data::Channel& channel, data::MediaEntry& mediaEntry, int epgTimeShift, int catchupCorrectionSecs, bool xeevCatchup);
     void ParseAndAddChannelGroups(const std::string& groupNamesListString, std::vector<int>& groupIdList, bool isRadio);
 
     std::string m_m3uLocation;
@@ -78,5 +89,9 @@ namespace iptvsimple
     iptvsimple::Channels& m_channels;
     iptvsimple::Media& m_media;
     kodi::addon::CInstancePVRClient* m_client;
+
+    M3UHeaderStrings m_m3uHeaderStrings;
+
+    std::shared_ptr<iptvsimple::InstanceSettings> m_settings;
   };
 } //namespace iptvsimple

@@ -8,8 +8,10 @@
 #pragma once
 
 #include "Channels.h"
+#include "InstanceSettings.h"
 #include "data/ChannelGroup.h"
 
+#include <memory>
 #include <string>
 #include <vector>
 
@@ -20,7 +22,7 @@ namespace iptvsimple
   class ChannelGroups
   {
   public:
-    ChannelGroups(const iptvsimple::Channels& channels);
+    ChannelGroups(const iptvsimple::Channels& channels, std::shared_ptr<iptvsimple::InstanceSettings>& settings);
 
     int GetChannelGroupsAmount() const;
     PVR_ERROR GetChannelGroups(kodi::addon::PVRChannelGroupsResultSet& results, bool radio) const;
@@ -34,11 +36,14 @@ namespace iptvsimple
     void Clear();
     bool CheckChannelGroupAllowed(iptvsimple::data::ChannelGroup& newChannelGroup);
     void ChannelGroupsLoadFailed() { m_channelGroupsLoadFailed = true; };
+    void RemoveEmptyGroups();
 
   private:
     const iptvsimple::Channels& m_channels;
     std::vector<iptvsimple::data::ChannelGroup> m_channelGroups;
 
     bool m_channelGroupsLoadFailed = false;
+
+    std::shared_ptr<iptvsimple::InstanceSettings> m_settings;
   };
 } //namespace iptvsimple

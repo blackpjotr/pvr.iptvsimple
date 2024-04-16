@@ -2,11 +2,12 @@
 [![Build and run tests](https://github.com/kodi-pvr/pvr.iptvsimple/actions/workflows/build.yml/badge.svg?branch=Nexus)](https://github.com/kodi-pvr/pvr.iptvsimple/actions/workflows/build.yml)
 [![Build Status](https://dev.azure.com/teamkodi/kodi-pvr/_apis/build/status/kodi-pvr.pvr.iptvsimple?branchName=Nexus)](https://dev.azure.com/teamkodi/kodi-pvr/_build/latest?definitionId=57&branchName=Nexus)
 [![Build Status](https://jenkins.kodi.tv/view/Addons/job/kodi-pvr/job/pvr.iptvsimple/job/Nexus/badge/icon)](https://jenkins.kodi.tv/blue/organizations/jenkins/kodi-pvr%2Fpvr.iptvsimple/branches/)
-[![Coverity Scan Build Status](https://scan.coverity.com/projects/5120/badge.svg)](https://scan.coverity.com/projects/5120)
 
 # IPTV Simple PVR
 
-IPTV Live TV and Radio PVR client addon for [Kodi](https://kodi.tv) with support for both Gzip and XZ compression of XMLTV. Supports catchup/archive streams if supported by the IPTV provider as well as streams from Kodi video add-ons.
+IPTV Live TV and Radio PVR client addon for [Kodi](https://kodi.tv) with support for both Gzip and XZ compression of XMLTV. Multiple pairs of M3U/XML files are supported via Kodi PVR since Kodi 20 (Nexus). Supports catchup/archive streams if supported by the IPTV provider as well as streams from Kodi video add-ons.
+
+To use multiple pairs of M3U/XML files simply visit the add-ons settings under `Configure`, and choose new `Add add-on configuration`.
 
 IPTV Simple will play back videos and streams using a number of different inputstreams. The options available, such as pause/resume, seeking, timshifting etc. will depend on both the provider of the streams and the inputstream used. For video on demand stream seeking will be enabled within the duration of the video regardless of the inputstream used. The differences occur with the playback of live and catchup streams.
 
@@ -89,7 +90,7 @@ If you would prefer to run the rebuild steps manually instead of using the above
 ## Configuring the addon
 
 ### Settings Levels
-Settings levels can be selected within the addon settings dialog. The options are: `Basic`, `Standard`, `Advanced` and `Expert`. If there are settings below that cannot be found it is most liekly because they are only available at a higher settings level.
+Settings levels can be selected within the addon settings dialog. The options are: `Basic`, `Standard`, `Advanced` and `Expert`. If there are settings below that cannot be found it is most likely because they are only available at a higher settings level.
 
 ### General
 General settings required for the addon to function.
@@ -145,6 +146,7 @@ For settings related to genres please see the next section.
 * **Cache XMLTV at local storage**: If location is `Remote path` select whether or not the the XMLTV file should be cached locally.
 * **EPG time shift**: Adjust the EPG times by this value, from -12 hours to +14 hours.
 * **Apply time shift to all channels**: Whether or not to override the time shift for all channels with `EPG time shift`. If not enabled `EPG time shift` plus the individual time shift per channel (if available) will be used.
+* **Ignore Case for EPG Channel IDs**: Ignore Case for EPG Channel IDs, also known as tvg-id's, when matching channels to EPG entries. If disabled, only case senitive matching will be used.
 
 #### Genres
 Settings related to genres.
@@ -179,12 +181,19 @@ An M3U entry can denote that it's media by having:
 * an M3U property of `EXT-X-PLAYLIST-TYPE` set to `VOD`,
 * or one of the M3U attributes of `media`, `media-dir` or `media-size`
 
-More detail on these can be found in [Supported M3U and XMLTV elements](#supported-m3u-and-xmltv-elements).
+More detail on these can be found in [Supported M3U and XMLTV elements](#supported-m3u-and-xmltv-elements). 
+
+Note that the media item will read from the XMLTV file, where it will read just the first entry. The entry must have a start time greater than now and be within the boundaries of the Kodi PVR Guide settings.
 
 * **Show media as recordings**: If enabled, all IPTV media entries can be shown as PVR recordings. Otherwise, they appear as regular PVR channels.
 * **Group entries by title**: If multiple entries exist with matching titles, create a virtual folder to group them together.
 * **Group entries by season**: If multiple entries exist with matching titles, try additionally grouping them in sub-folders representing seasons.
 * **Include season and episode number in title**: Prepend the season and episode numbers to the title.
+* **Use M3U Group name in path**: Select how to use the M3U group title in the path. Note that it will only be used if a single group name is provided. The options are:
+    - `Never` - Never use it.
+    - `Always append` - Always append it.
+    - `When no media-dir is present` - Only use the group title of the M3U when no media-dir is provided.
+* **Force all M3U entries to be media**: Force the full playlist to be media, regardless of what tags are present. Since the introduction of multiple instances for PVR add-ons this option can be useful.
 * **Include VODs as media**: Show VOD as recordings if enabled. If disabled only M3U entries with media attributes will be shown as PVR recordings.
 
 ### Timeshift
@@ -342,7 +351,7 @@ The following files are currently available with the addon:
 
 Note that both these files are provided as examples and are overwritten each time the addon starts. Therefore you should make copies and use those for your custom config.
 
-The format is quite simple, containing a number of channel group/bouquet names.
+The format is quite simple, containing a number of channel group names.
 
 ### Provider Name Mappings (Channels)
 
@@ -375,6 +384,7 @@ The format specifiers are substitution based and work as follows:
 - `{M}`: The minute (00-59) of the start date\time.
 - `{S}`: The second (00-59) of the start date\time.
 - `{duration}`: The programme duration + any start and end buffer (if set).
+- `${duration}`: Same as `{duration}`.
 - `{duration:X}`: The programme duration (as above) divided by X seconds. Allows conversion to minutes and other time units. The minimum divider is 1, it must be an integer (not 1.5 or 2.25 etc.) and it must be a positive value. E.g. If you have a duration of 7200 seconds and you need 2 hours (2 hours is 7200 seconds), it means your divider is 3600: `{duration:3600}`. If you need minutes for the same duration you could use: `{duration:60}` which would result in a value of 120.
 - `{offset:X}`: The current offset (now - start time) divided by X seconds. Allows conversion to minutes and other time units. The minimum divider is 1, it must be an integer (not 1.5 or 2.25 etc.) and it must be a positive value. E.g. If you need an offset of 720 for a start time of 2 hours ago (2 hours is 7200 seconds), it means your divider is 10: `{offset:10}`. If you need minutes for the same offset you could use: `{offset:60}` which would result in a value of 120.
 - `{catchup-id}`: A programme specific identifier required in the catchup URL, value loaded from XMLTV programme entries.
@@ -511,7 +521,8 @@ http://path-to-stream/live/channel-z.ts
   - `media`: Specifies that this entry is a media entry by setting the values true `true`. Same as setting `#EXT-X-PLAYLIST-TYPE` to VOD.
   - `media-dir`: An optional directory path which should specifiy where in the hierarchy this media entry should be represented. The path separator is `/`.
   - `media-size`: An optional size of the media entry in bytes. Note: this is not usually available for VOD libraries.
-- `#EXTGRP`: A semi-colon separted list of channel groups that this channel belongs to.
+  - `realtime`: Live streams in PVR disable features such as passthrough by default. Set this item to "false" to bypass this behaviour if the stream should not be treated like VOD/Media in the UI.
+- `#EXTGRP`: A semi-colon separted list of channel groups. Note that this is a begin directive, i.e. all channels following this directive will have these groups until an empty `#EXTGRP` directive is reached. These groupings wil also be reset by any `group-title` tag for an `#EXTINF` channel directive.
 - `#KODIPROP`: A single property in the format `key=value` that can be passed to Kodi. Multiple can be passed each on a separate line.
 - `#EXTVLCOPT`: A single property in the format `key=value` that can be passed to Kodi. Multiple can be passed each on a separate line. Note that if either a `http-user-agent` or a `http-referrer` property is found it will added to the URL as a HTTP header as `user-agent` or `referrer` respectively if not already provided in the URL. These two fields specifically will be dropped as properties whether or not they are added as header values. They will be added in the same format as the `URL` below.
 - `#EXT-X-PLAYLIST-TYPE`: If this element is present with a value of `VOD` (Video on Demand) the stream is marked as not being live.

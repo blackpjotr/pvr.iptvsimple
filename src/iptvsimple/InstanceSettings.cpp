@@ -5,7 +5,7 @@
  *  See LICENSE.md for more information.
  */
 
-#include "Settings.h"
+#include "InstanceSettings.h"
 
 #include "utilities/FileUtils.h"
 #include "utilities/XMLUtils.h"
@@ -19,36 +19,38 @@ using namespace pugi;
 /***************************************************************************
  * PVR settings
  **************************************************************************/
-void Settings::ReadFromAddon(const std::string& userPath, const std::string& clientPath)
+
+InstanceSettings::InstanceSettings(kodi::addon::IAddonInstance& instance, const kodi::addon::IInstanceInfo& instanceInfo)
+  : m_instance(instance), m_instanceNumber(instanceInfo.GetNumber())
 {
-  FileUtils::CopyDirectory(FileUtils::GetResourceDataPath() + CHANNEL_GROUPS_DIR, CHANNEL_GROUPS_ADDON_DATA_BASE_DIR, true);
+  ReadSettings();
+}
 
-  m_userPath = userPath;
-  m_clientPath = clientPath;
-
+void InstanceSettings::ReadSettings()
+{
   // M3U
-  m_m3uPathType = kodi::GetSettingEnum<PathType>("m3uPathType", PathType::REMOTE_PATH);
-  m_m3uPath = kodi::GetSettingString("m3uPath");
-  m_m3uUrl = kodi::GetSettingString("m3uUrl");
-  m_cacheM3U = kodi::GetSettingBoolean("m3uCache");
-  m_startChannelNumber = kodi::GetSettingInt("startNum", 1);
-  m_numberChannelsByM3uOrderOnly = kodi::GetSettingBoolean("numberByOrder", false);
-  m_m3uRefreshMode = kodi::GetSettingEnum<RefreshMode>("m3uRefreshMode", RefreshMode::DISABLED);
-  m_m3uRefreshIntervalMins = kodi::GetSettingInt("m3uRefreshIntervalMins", 60);
-  m_m3uRefreshHour = kodi::GetSettingInt("m3uRefreshHour", 4);
-  m_defaultProviderName = kodi::GetSettingString("defaultProviderName");
-  m_enableProviderMappings = kodi::GetSettingBoolean("enableProviderMappings", false);
-  m_providerMappingFile = kodi::GetSettingString("providerMappingFile", DEFAULT_PROVIDER_NAME_MAP_FILE);
+  m_instance.CheckInstanceSettingEnum<PathType>("m3uPathType", m_m3uPathType);
+  m_instance.CheckInstanceSettingString("m3uPath", m_m3uPath);
+  m_instance.CheckInstanceSettingString("m3uUrl", m_m3uUrl);
+  m_instance.CheckInstanceSettingBoolean("m3uCache", m_cacheM3U);
+  m_instance.CheckInstanceSettingInt("startNum", m_startChannelNumber);
+  m_instance.CheckInstanceSettingBoolean("numberByOrder", m_numberChannelsByM3uOrderOnly);
+  m_instance.CheckInstanceSettingEnum<RefreshMode>("m3uRefreshMode", m_m3uRefreshMode);
+  m_instance.CheckInstanceSettingInt("m3uRefreshIntervalMins", m_m3uRefreshIntervalMins);
+  m_instance.CheckInstanceSettingInt("m3uRefreshHour", m_m3uRefreshHour);
+  m_instance.CheckInstanceSettingString("defaultProviderName", m_defaultProviderName);
+  m_instance.CheckInstanceSettingBoolean("enableProviderMappings", m_enableProviderMappings);
+  m_instance.CheckInstanceSettingString("providerMappingFile", m_providerMappingFile);
 
   // Groups
-  m_allowTVChannelGroupsOnly = kodi::GetSettingBoolean("tvChannelGroupsOnly", false);
-  m_tvChannelGroupMode = kodi::GetSettingEnum<ChannelGroupMode>("tvGroupMode", ChannelGroupMode::ALL_GROUPS);
-  m_numTVGroups = kodi::GetSettingInt("numTvGroups", DEFAULT_NUM_GROUPS);
-  m_oneTVGroup = kodi::GetSettingString("oneTvGroup");
-  m_twoTVGroup = kodi::GetSettingString("twoTvGroup");
-  m_threeTVGroup = kodi::GetSettingString("threeTvGroup");
-  m_fourTVGroup = kodi::GetSettingString("fourTvGroup");
-  m_fiveTVGroup = kodi::GetSettingString("fiveTvGroup");
+  m_instance.CheckInstanceSettingBoolean("tvChannelGroupsOnly", m_allowTVChannelGroupsOnly);
+  m_instance.CheckInstanceSettingEnum<ChannelGroupMode>("tvGroupMode", m_tvChannelGroupMode);
+  m_instance.CheckInstanceSettingInt("numTvGroups", m_numTVGroups);
+  m_instance.CheckInstanceSettingString("oneTvGroup", m_oneTVGroup);
+  m_instance.CheckInstanceSettingString("twoTvGroup", m_twoTVGroup);
+  m_instance.CheckInstanceSettingString("threeTvGroup", m_threeTVGroup);
+  m_instance.CheckInstanceSettingString("fourTvGroup", m_fourTVGroup);
+  m_instance.CheckInstanceSettingString("fiveTvGroup", m_fiveTVGroup);
   if (m_tvChannelGroupMode == ChannelGroupMode::SOME_GROUPS)
   {
     m_customTVChannelGroupNameList.clear();
@@ -64,18 +66,18 @@ void Settings::ReadFromAddon(const std::string& userPath, const std::string& cli
     if (!m_fiveTVGroup.empty() && m_numTVGroups >= 5)
       m_customTVChannelGroupNameList.emplace_back(m_fiveTVGroup);
   }
-  m_customTVGroupsFile = kodi::GetSettingString("customTvGroupsFile", DEFAULT_CUSTOM_TV_GROUPS_FILE);
+  m_instance.CheckInstanceSettingString("customTvGroupsFile", m_customTVGroupsFile);
   if (m_tvChannelGroupMode == ChannelGroupMode::CUSTOM_GROUPS)
     LoadCustomChannelGroupFile(m_customTVGroupsFile, m_customTVChannelGroupNameList);
 
-  m_allowRadioChannelGroupsOnly = kodi::GetSettingBoolean("radioChannelGroupsOnly", false);
-  m_radioChannelGroupMode = kodi::GetSettingEnum<ChannelGroupMode>("radioGroupMode", ChannelGroupMode::ALL_GROUPS);
-  m_numRadioGroups = kodi::GetSettingInt("numRadioGroups", DEFAULT_NUM_GROUPS);
-  m_oneRadioGroup = kodi::GetSettingString("oneRadioGroup");
-  m_twoRadioGroup = kodi::GetSettingString("twoRadioGroup");
-  m_threeRadioGroup = kodi::GetSettingString("threeRadioGroup");
-  m_fourRadioGroup = kodi::GetSettingString("fourRadioGroup");
-  m_fiveRadioGroup = kodi::GetSettingString("fiveRadioGroup");
+  m_instance.CheckInstanceSettingBoolean("radioChannelGroupsOnly", m_allowRadioChannelGroupsOnly);
+  m_instance.CheckInstanceSettingEnum<ChannelGroupMode>("radioGroupMode", m_radioChannelGroupMode);
+  m_instance.CheckInstanceSettingInt("numRadioGroups", m_numRadioGroups);
+  m_instance.CheckInstanceSettingString("oneRadioGroup", m_oneRadioGroup);
+  m_instance.CheckInstanceSettingString("twoRadioGroup", m_twoRadioGroup);
+  m_instance.CheckInstanceSettingString("threeRadioGroup", m_threeRadioGroup);
+  m_instance.CheckInstanceSettingString("fourRadioGroup", m_fourRadioGroup);
+  m_instance.CheckInstanceSettingString("fiveRadioGroup", m_fiveRadioGroup);
   if (m_radioChannelGroupMode == ChannelGroupMode::SOME_GROUPS)
   {
     m_customRadioChannelGroupNameList.clear();
@@ -91,82 +93,85 @@ void Settings::ReadFromAddon(const std::string& userPath, const std::string& cli
     if (!m_fiveRadioGroup.empty() && m_numRadioGroups >= 5)
       m_customRadioChannelGroupNameList.emplace_back(m_fiveRadioGroup);
   }
-  m_customRadioGroupsFile = kodi::GetSettingString("customRadioGroupsFile", DEFAULT_CUSTOM_RADIO_GROUPS_FILE);
+  m_instance.CheckInstanceSettingString("customRadioGroupsFile", m_customRadioGroupsFile);
   if (m_radioChannelGroupMode == ChannelGroupMode::CUSTOM_GROUPS)
     LoadCustomChannelGroupFile(m_customRadioGroupsFile, m_customRadioChannelGroupNameList);
 
   // EPG
-  m_epgPathType = kodi::GetSettingEnum<PathType>("epgPathType", PathType::REMOTE_PATH);
-  m_epgPath = kodi::GetSettingString("epgPath");
-  m_epgUrl = kodi::GetSettingString("epgUrl");
-  m_cacheEPG = kodi::GetSettingBoolean("epgCache", true);
-  m_epgTimeShiftHours = kodi::GetSettingFloat("epgTimeShift", 0.0f);
-  m_tsOverride = kodi::GetSettingBoolean("epgTSOverride", true);
+  m_instance.CheckInstanceSettingEnum<PathType>("epgPathType", m_epgPathType);
+  m_instance.CheckInstanceSettingString("epgPath", m_epgPath);
+  m_instance.CheckInstanceSettingString("epgUrl", m_epgUrl);
+  m_instance.CheckInstanceSettingBoolean("epgCache", m_cacheEPG);
+  m_instance.CheckInstanceSettingFloat("epgTimeShift", m_epgTimeShiftHours);
+  m_instance.CheckInstanceSettingBoolean("epgTSOverride", m_tsOverride);
+  m_instance.CheckInstanceSettingBoolean("epgIgnoreCaseForChannelIds", m_ignoreCaseForEpgChannelIds);
 
   //Genres
-  m_useEpgGenreTextWhenMapping = kodi::GetSettingBoolean("useEpgGenreText", false);
-  m_genresPathType = kodi::GetSettingEnum<PathType>("genresPathType", PathType::LOCAL_PATH);
-  m_genresPath = kodi::GetSettingString("genresPath");
-  m_genresUrl = kodi::GetSettingString("genresUrl");
+  m_instance.CheckInstanceSettingBoolean("useEpgGenreText", m_useEpgGenreTextWhenMapping);
+  m_instance.CheckInstanceSettingEnum<PathType>("genresPathType", m_genresPathType);
+  m_instance.CheckInstanceSettingString("genresPath", m_genresPath);
+  m_instance.CheckInstanceSettingString("genresUrl", m_genresUrl);
 
   // Channel Logos
-  m_logoPathType = kodi::GetSettingEnum<PathType>("logoPathType", PathType::REMOTE_PATH);
-  m_logoPath = kodi::GetSettingString("logoPath");
-  m_logoBaseUrl = kodi::GetSettingString("logoBaseUrl");
-  m_epgLogosMode = kodi::GetSettingEnum<EpgLogosMode>("logoFromEpg", EpgLogosMode::IGNORE_XMLTV);
-  m_useLocalLogosOnly = kodi::GetSettingBoolean("useLogosLocalPathOnly", false);
+  m_instance.CheckInstanceSettingEnum<PathType>("logoPathType", m_logoPathType);
+  m_instance.CheckInstanceSettingString("logoPath", m_logoPath);
+  m_instance.CheckInstanceSettingString("logoBaseUrl", m_logoBaseUrl);
+  m_instance.CheckInstanceSettingEnum<EpgLogosMode>("logoFromEpg", m_epgLogosMode);
+  m_instance.CheckInstanceSettingBoolean("useLogosLocalPathOnly", m_useLocalLogosOnly);
 
-  // Media m_mediaEnabled
-  m_mediaEnabled = kodi::GetSettingBoolean("mediaEnabled", true);
-  m_showVodAsRecordings = kodi::GetSettingBoolean("mediaVODAsRecordings", true);
-  m_groupMediaByTitle = kodi::GetSettingBoolean("mediaGroupByTitle", true);
-  m_groupMediaBySeason = kodi::GetSettingBoolean("mediaGroupBySeason", true);
-  m_includeShowInfoInMediaTitle = kodi::GetSettingBoolean("mediaTitleSeasonEpisode", false);
+  // Media
+  m_instance.CheckInstanceSettingBoolean("mediaEnabled", m_mediaEnabled);
+  m_instance.CheckInstanceSettingBoolean("mediaVODAsRecordings", m_showVodAsRecordings);
+  m_instance.CheckInstanceSettingBoolean("mediaGroupByTitle", m_groupMediaByTitle);
+  m_instance.CheckInstanceSettingBoolean("mediaGroupBySeason", m_groupMediaBySeason);
+  m_instance.CheckInstanceSettingEnum<MediaUseM3UGroupPathMode>("mediaM3UGroupPath", m_mediaUseM3UGroupPathMode);
+  m_instance.CheckInstanceSettingBoolean("mediaForcePlaylist", m_mediaForcePlaylist);
+  m_instance.CheckInstanceSettingBoolean("mediaTitleSeasonEpisode", m_includeShowInfoInMediaTitle);
 
   // Timeshift
-  m_timeshiftEnabled = kodi::GetSettingBoolean("timeshiftEnabled", false);
-  m_timeshiftEnabledAll = kodi::GetSettingBoolean("timeshiftEnabledAll", false);
-  m_timeshiftEnabledHttp = kodi::GetSettingBoolean("timeshiftEnabledHttp", false);
-  m_timeshiftEnabledUdp = kodi::GetSettingBoolean("timeshiftEnabledUdp", false);
-  m_timeshiftEnabledCustom = kodi::GetSettingBoolean("timeshiftEnabledCustom", false);
+  m_instance.CheckInstanceSettingBoolean("timeshiftEnabled", m_timeshiftEnabled);
+  m_instance.CheckInstanceSettingBoolean("timeshiftEnabledAll", m_timeshiftEnabledAll);
+  m_instance.CheckInstanceSettingBoolean("timeshiftEnabledHttp", m_timeshiftEnabledHttp);
+  m_instance.CheckInstanceSettingBoolean("timeshiftEnabledUdp", m_timeshiftEnabledUdp);
+  m_instance.CheckInstanceSettingBoolean("timeshiftEnabledCustom", m_timeshiftEnabledCustom);
 
   // Catchup
-  m_catchupEnabled = kodi::GetSettingBoolean("catchupEnabled", false);
-  m_catchupQueryFormat = kodi::GetSettingString("catchupQueryFormat");
-  m_catchupDays = kodi::GetSettingInt("catchupDays", 5);
-  m_allChannelsCatchupMode = kodi::GetSettingEnum<CatchupMode>("allChannelsCatchupMode", CatchupMode::DISABLED);
-  m_catchupOverrideMode = kodi::GetSettingEnum<CatchupOverrideMode>("catchupOverrideMode", CatchupOverrideMode::WITHOUT_TAGS);
-  m_catchupCorrectionHours = kodi::GetSettingFloat("catchupCorrection", 0.0f);
-  m_catchupPlayEpgAsLive = kodi::GetSettingBoolean("catchupPlayEpgAsLive", false);
-  m_catchupWatchEpgBeginBufferMins = kodi::GetSettingInt("catchupWatchEpgBeginBufferMins", 5);
-  m_catchupWatchEpgEndBufferMins = kodi::GetSettingInt("catchupWatchEpgEndBufferMins", 15);
-  m_catchupOnlyOnFinishedProgrammes = kodi::GetSettingBoolean("catchupOnlyOnFinishedProgrammes", false);
+  m_instance.CheckInstanceSettingBoolean("catchupEnabled", m_catchupEnabled);
+  m_instance.CheckInstanceSettingString("catchupQueryFormat", m_catchupQueryFormat);
+  m_instance.CheckInstanceSettingInt("catchupDays", m_catchupDays);
+  m_instance.CheckInstanceSettingEnum<CatchupMode>("allChannelsCatchupMode", m_allChannelsCatchupMode);
+  m_instance.CheckInstanceSettingEnum<CatchupOverrideMode>("catchupOverrideMode", m_catchupOverrideMode);
+  m_instance.CheckInstanceSettingFloat("catchupCorrection", m_catchupCorrectionHours);
+  m_instance.CheckInstanceSettingBoolean("catchupPlayEpgAsLive", m_catchupPlayEpgAsLive);
+  m_instance.CheckInstanceSettingInt("catchupWatchEpgBeginBufferMins", m_catchupWatchEpgBeginBufferMins);
+  m_instance.CheckInstanceSettingInt("catchupWatchEpgEndBufferMins", m_catchupWatchEpgEndBufferMins);
+  m_instance.CheckInstanceSettingBoolean("catchupOnlyOnFinishedProgrammes", m_catchupOnlyOnFinishedProgrammes);
 
   // Advanced
-  m_transformMulticastStreamUrls = kodi::GetSettingBoolean("transformMulticastStreamUrls", false);
-  m_udpxyHost = kodi::GetSettingString("udpxyHost");
-  m_udpxyPort = kodi::GetSettingInt("udpxyPort", DEFAULT_UDPXY_MULTICAST_RELAY_PORT);
-  m_useFFmpegReconnect = kodi::GetSettingBoolean("useFFmpegReconnect");
-  m_useInputstreamAdaptiveforHls = kodi::GetSettingBoolean("useInputstreamAdaptiveforHls", false);
-  m_defaultUserAgent = kodi::GetSettingString("defaultUserAgent");
-  m_defaultInputstream = kodi::GetSettingString("defaultInputstream");
-  m_defaultMimeType = kodi::GetSettingString("defaultMimeType");
+  m_instance.CheckInstanceSettingBoolean("transformMulticastStreamUrls", m_transformMulticastStreamUrls);
+  m_instance.CheckInstanceSettingString("udpxyHost", m_udpxyHost);
+  m_instance.CheckInstanceSettingInt("udpxyPort", m_udpxyPort);
+  m_instance.CheckInstanceSettingBoolean("useFFmpegReconnect", m_useFFmpegReconnect);
+  m_instance.CheckInstanceSettingBoolean("useInputstreamAdaptiveforHls", m_useInputstreamAdaptiveforHls);
+  m_instance.CheckInstanceSettingString("defaultUserAgent", m_defaultUserAgent);
+  m_instance.CheckInstanceSettingString("defaultInputstream", m_defaultInputstream);
+  m_instance.CheckInstanceSettingString("defaultMimeType", m_defaultMimeType);
 }
 
-void Settings::ReloadAddonSettings()
+void InstanceSettings::ReloadAddonInstanceSettings()
 {
-  ReadFromAddon(m_userPath, m_clientPath);
+  ReadSettings();
 }
 
-ADDON_STATUS Settings::SetValue(const std::string& settingName, const kodi::CSettingValue& settingValue)
+ADDON_STATUS InstanceSettings::SetSetting(const std::string& settingName, const kodi::addon::CSettingValue& settingValue)
 {
   // reset cache and restart addon
 
-  std::string strFile = FileUtils::GetUserDataAddonFilePath(M3U_CACHE_FILENAME);
+  std::string strFile = FileUtils::GetUserDataAddonFilePath(GetUserPath(), GetM3UCacheFilename());
   if (FileUtils::FileExists(strFile))
     FileUtils::DeleteFile(strFile);
 
-  strFile = FileUtils::GetUserDataAddonFilePath(XMLTV_CACHE_FILENAME);
+  strFile = FileUtils::GetUserDataAddonFilePath(GetUserPath(), GetXMLTVCacheFilename());
   if (FileUtils::FileExists(strFile))
     FileUtils::DeleteFile(strFile);
 
@@ -201,7 +206,7 @@ ADDON_STATUS Settings::SetValue(const std::string& settingName, const kodi::CSet
   else if (settingName == "tvGroupMode")
     return SetEnumSetting<ChannelGroupMode, ADDON_STATUS>(settingName, settingValue, m_tvChannelGroupMode, ADDON_STATUS_OK, ADDON_STATUS_OK);
   else if (settingName == "numTvGroups")
-    return SetSetting<unsigned int, ADDON_STATUS>(settingName, settingValue, m_numTVGroups, ADDON_STATUS_OK, ADDON_STATUS_OK);
+    return SetSetting<int, ADDON_STATUS>(settingName, settingValue, m_numTVGroups, ADDON_STATUS_OK, ADDON_STATUS_OK);
   else if (settingName == "oneTvGroup")
     return SetStringSetting<ADDON_STATUS>(settingName, settingValue, m_oneTVGroup, ADDON_STATUS_OK, ADDON_STATUS_OK);
   else if (settingName == "twoTvGroup")
@@ -219,7 +224,7 @@ ADDON_STATUS Settings::SetValue(const std::string& settingName, const kodi::CSet
   else if (settingName == "radioGroupMode")
     return SetEnumSetting<ChannelGroupMode, ADDON_STATUS>(settingName, settingValue, m_radioChannelGroupMode, ADDON_STATUS_OK, ADDON_STATUS_OK);
   else if (settingName == "numRadioGroups")
-    return SetSetting<unsigned int, ADDON_STATUS>(settingName, settingValue, m_numRadioGroups, ADDON_STATUS_OK, ADDON_STATUS_OK);
+    return SetSetting<int, ADDON_STATUS>(settingName, settingValue, m_numRadioGroups, ADDON_STATUS_OK, ADDON_STATUS_OK);
   else if (settingName == "oneRadioGroup")
     return SetStringSetting<ADDON_STATUS>(settingName, settingValue, m_oneRadioGroup, ADDON_STATUS_OK, ADDON_STATUS_OK);
   else if (settingName == "twoRadioGroup")
@@ -245,6 +250,8 @@ ADDON_STATUS Settings::SetValue(const std::string& settingName, const kodi::CSet
     return SetSetting<float, ADDON_STATUS>(settingName, settingValue, m_epgTimeShiftHours, ADDON_STATUS_OK, ADDON_STATUS_OK);
   else if (settingName == "epgTSOverride")
     return SetSetting<bool, ADDON_STATUS>(settingName, settingValue, m_tsOverride, ADDON_STATUS_OK, ADDON_STATUS_OK);
+  else if (settingName == "epgIgnoreCaseForChannelIds")
+    return SetSetting<bool, ADDON_STATUS>(settingName, settingValue, m_ignoreCaseForEpgChannelIds, ADDON_STATUS_OK, ADDON_STATUS_OK);
   // Genres
   else if (settingName == "useEpgGenreText")
     return SetSetting<bool, ADDON_STATUS>(settingName, settingValue, m_useEpgGenreTextWhenMapping, ADDON_STATUS_OK, ADDON_STATUS_OK);
@@ -274,6 +281,10 @@ ADDON_STATUS Settings::SetValue(const std::string& settingName, const kodi::CSet
     return SetSetting<bool, ADDON_STATUS>(settingName, settingValue, m_groupMediaBySeason, ADDON_STATUS_OK, ADDON_STATUS_OK);
   else if (settingName == "mediaTitleSeasonEpisode")
     return SetSetting<bool, ADDON_STATUS>(settingName, settingValue, m_includeShowInfoInMediaTitle, ADDON_STATUS_OK, ADDON_STATUS_OK);
+  else if (settingName == "mediaM3UGroupPath")
+    return SetEnumSetting<MediaUseM3UGroupPathMode, ADDON_STATUS>(settingName, settingValue, m_mediaUseM3UGroupPathMode, ADDON_STATUS_OK, ADDON_STATUS_OK);
+  else if (settingName == "mediaForcePlaylist")
+    return SetSetting<bool, ADDON_STATUS>(settingName, settingValue, m_mediaForcePlaylist, ADDON_STATUS_OK, ADDON_STATUS_OK);
   else if (settingName == "mediaVODAsRecordings")
     return SetSetting<bool, ADDON_STATUS>(settingName, settingValue, m_showVodAsRecordings, ADDON_STATUS_OK, ADDON_STATUS_OK);
   // Timeshift
@@ -329,7 +340,7 @@ ADDON_STATUS Settings::SetValue(const std::string& settingName, const kodi::CSet
   return ADDON_STATUS_OK;
 }
 
-bool Settings::LoadCustomChannelGroupFile(std::string& xmlFile, std::vector<std::string>& channelGroupNameList)
+bool InstanceSettings::LoadCustomChannelGroupFile(std::string& xmlFile, std::vector<std::string>& channelGroupNameList)
 {
   channelGroupNameList.clear();
 
